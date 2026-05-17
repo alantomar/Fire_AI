@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered real-time fire detection system with YOLOv8 deep learning">
+    <title>SYS_OVR_FIRE_GUARD // LIVE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <!-- Full-screen Background Video Feed -->
+    <div class="hud-background">
+        <img id="videoFeed" src="/video_feed" alt="Live Feed" class="hud-video">
+        
+        <!-- CRT / Scanline effects over video -->
+        <div class="hud-scanlines"></div>
+        <div class="hud-scanner-bar"></div>
+        <div class="hud-vignette"></div>
+        
+        <!-- HUD Crosshairs -->
+        <div class="hud-crosshair top-left"></div>
+        <div class="hud-crosshair top-right"></div>
+        <div class="hud-crosshair bottom-left"></div>
+        <div class="hud-crosshair bottom-right"></div>
+        <div class="hud-center-target">
+            <div class="target-circle"></div>
+            <div class="target-dot"></div>
+        </div>
+    </div>
+
+    <!-- Critical Alert Overlay (Hidden by default) -->
+    <div id="fireAlertOverlay" class="critical-alert hidden">
+        <div class="alert-glitch-bg"></div>
+        <div class="alert-box">
+            <div class="alert-icon">⚠️ WARNING</div>
+            <h1 class="glitch" data-text="FIRE DETECTED">FIRE DETECTED</h1>
+            <p id="alertDetails" class="alert-details">THERMAL ANOMALY: HIGH CONFIDENCE</p>
+            <div class="alert-actions">
+                <button onclick="dismissAlert()" class="cyber-btn btn-dismiss">
+                    <span>INITIALIZE OVERRIDE_</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main HUD UI Overlay -->
+    <div class="hud-ui-layer">
+        
+        <!-- Top Navigation Bar -->
+        <header class="hud-header">
+            <div class="sys-brand">
+                <span class="brand-icon">🔥</span>
+                <div class="brand-text">
+                    <span class="sys-name">FIRE_GUARD//AI</span>
+                    <span class="sys-ver">V2.4.0_NEXUS</span>
+                </div>
+            </div>
+            
+            <div class="sys-status" id="statusBadge">
+                <span class="status-pulse"></span>
+                <span class="status-text" id="statusText">SYS.MONITORING</span>
+            </div>
+
+            <div class="sys-metrics">
+                <div class="metric">
+                    <span class="metric-label">UPTIME</span>
+                    <span class="metric-val" id="uptimeDisplay">00:00:00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">ENGINE</span>
+                    <span class="metric-val highlight" id="modelBadge">COLOR</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">NET</span>
+                    <span class="metric-val" id="connectionStatus">1ms</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Floating Side Panels -->
+        <div class="hud-panels">
+            
+            <!-- LEFT PANEL: Controls & Stream Info -->
+            <aside class="panel-side left-side slide-in-left">
+                <div class="cyber-panel">
+                    <div class="panel-title"><span>SYS.CONTROLS</span> <div class="decor-line"></div></div>
+                    
+                    <div class="control-grid">
+                        <div class="cyber-slider-group">
+                            <label>SENSITIVITY <span id="sensitivityValue">45%</span></label>
+                            <input type="range" id="sensitivitySlider" class="cyber-slider" min="10" max="95" value="45" step="5">
+                        </div>
+                        <div class="cyber-slider-group">
+                            <label>COOLDOWN <span id="cooldownValue">10s</span></label>
+                            <input type="range" id="cooldownSlider" class="cyber-slider" min="3" max="60" value="10" step="1">
+                        </div>
+                        
+                        <div class="cyber-input-group">
+                            <label>SOURCE</label>
+                            <select id="cameraSelect" class="cyber-select">
+                                <option value="0">CAM_0 [LOCAL]</option>
+                            </select>
+                        </div>
+                        
+                        <div class="cyber-toggle-group">
+                            <label>AUDIO.ALARM</label>
+                            <label class="cyber-switch">
+                                <input type="checkbox" id="soundToggle" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="action-grid">
+                        <button onclick="testAlarm()" class="cyber-btn btn-sec" id="testAlarmBtn">
+                            <span>TEST.ALARM</span>
+                        </button>
+                        <button onclick="reloadModel()" class="cyber-btn btn-prim" id="reloadModelBtn">
+                            <span>REBOOT.MODEL</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="cyber-panel mini-panel">
+                    <div class="panel-title"><span>STREAM.DAT</span></div>
+                    <div class="stream-stats">
+                        <div class="stat-row"><span>RES</span> <span>1280x720</span></div>
+                        <div class="stat-row"><span>FPS</span> <span id="fpsDisplay" class="value-highlight">--</span></div>
+                        <div class="stat-row"><span>ENC</span> <span>MJPEG</span></div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- RIGHT PANEL: Analytics & History -->
+            <aside class="panel-side right-side slide-in-right">
+                
+                <div class="cyber-panel status-panel" id="detectionStatusPanel">
+                    <div class="panel-title"><div class="decor-line"></div> <span>ANALYSIS</span></div>
+                    
+                    <div class="analysis-ring-container">
+                        <div class="analysis-ring safe" id="statusRing">
+                            <!-- Inner rotating dashes -->
+                            <div class="ring-spinner"></div>
+                            <div class="ring-center">
+                                <span class="ring-emoji" id="statusEmoji">✓</span>
+                                <span class="ring-text" id="statusLabel">SECURE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="data-grid">
+                        <div class="data-box">
+                            <span class="d-val" id="totalDetections">0</span>
+                            <span class="d-lbl">TOTAL.LOGS</span>
+                        </div>
+                        <div class="data-box">
+                            <span class="d-val" id="sessionAlerts">0</span>
+                            <span class="d-lbl">SESS.LOGS</span>
+                        </div>
+                        <div class="data-box">
+                            <span class="d-val highlight" id="detectionFPS">0</span>
+                            <span class="d-lbl">INFER.FPS</span>
+                        </div>
+                        <div class="data-box">
+                            <span class="d-val" id="confidenceDisplay">--</span>
+                            <span class="d-lbl">CONF.LVL</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cyber-panel history-panel">
+                    <div class="panel-title">
+                        <div class="decor-line"></div> <span>EVENT.LOG</span>
+                        <button onclick="refreshHistory()" class="btn-refresh">↻</button>
+                    </div>
+                    <div class="log-container" id="historyList">
+                        <div class="log-empty">
+                            <div class="log-empty-glitch">NO THREATS DETECTED</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <!-- Audio Element for Alarm -->
+    <!-- (Added via JS dynamically or loaded locally if needed, current implementation uses native Audio in JS) -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
